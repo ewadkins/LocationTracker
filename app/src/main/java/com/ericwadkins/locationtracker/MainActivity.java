@@ -1,12 +1,16 @@
 package com.ericwadkins.locationtracker;
 
 import android.Manifest;
+import android.app.Activity;
+import android.app.ActivityManager;
 import android.app.AlarmManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.location.Location;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.ResultReceiver;
 import android.support.design.widget.TabLayout;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentManager;
@@ -20,6 +24,8 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Button;
+import android.widget.Toast;
 
 import com.afollestad.materialdialogs.MaterialDialog;
 import com.ericwadkins.tabbedlayout.R;
@@ -91,7 +97,7 @@ public class MainActivity extends AppCompatActivity {
                 GPSTracker.requestEnableGPS(this);
             }
             else {
-                GPSTracker tracker = new GPSTracker(this);
+                /*GPSTracker tracker = new GPSTracker(this);
                 Location location = tracker.getLocation();
                 if (location != null) {
                     Log.e("debug", location.getLatitude() + ", " + location.getLongitude());
@@ -100,7 +106,7 @@ public class MainActivity extends AppCompatActivity {
                     Log.e("debug", "null");
                 }
 
-                Intent intent = new Intent(this, GPSTracker.class);
+                Intent intent = new Intent(this, GPSService.class);
                 PendingIntent pendingIntent = PendingIntent.getBroadcast(this,  0, intent, 0);
 
                 AlarmManager alarmManager = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
@@ -109,7 +115,33 @@ public class MainActivity extends AppCompatActivity {
                 calendar.add(Calendar.SECOND, 1); // first time
                 long frequency = 5 * 1000; // Frequency in milliseconds
                 alarmManager.setRepeating(AlarmManager.RTC_WAKEUP,
-                        calendar.getTimeInMillis(), frequency, pendingIntent);
+                        calendar.getTimeInMillis(), frequency, pendingIntent);*/
+
+                // Starting GPS Service
+                /*GPSResultReceiver receiver = new GPSResultReceiver(new Handler());
+                receiver.setReceiver(new GPSResultReceiver.Receiver() {
+                    @Override
+                    public void onReceiveResult(int resultCode, Bundle resultData) {
+                        switch (resultCode) {
+                            case GPSService.STATUS_RUNNING: Log.e("DEBUG", "Running"); break;
+                            case GPSService.STATUS_FINISHED: Log.e("DEBUG", "Finished"); break;
+                        }
+                    }
+                });
+                Intent intent = new Intent(Intent.ACTION_SYNC, null, this, GPSService.class);
+
+                // Send optional extras to the IntentService
+                intent.putExtra("receiver", receiver);
+
+                startService(intent);*/
+
+                /*if (!isServiceRunning(this, GPSTracker.class)) {
+                    Intent intent = new Intent(this, GPSTracker.class);
+                    startService(intent);
+                }
+                else {
+                    Log.e("debug", "GPSTracker service already running");
+                }*/
             }
 
         }
@@ -125,7 +157,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void getTrackerPermissions() {
         PermissionHelper.requestPermissions(this,
-                new String[] {
+                new String[]{
                         Manifest.permission.ACCESS_FINE_LOCATION,
                         Manifest.permission.INTERNET},
                 "This app needs access to the Internet and GPS to work properly!",
@@ -139,8 +171,7 @@ public class MainActivity extends AppCompatActivity {
                                             " has the required permissions.")
                                     .positiveText("OK")
                                     .show();
-                        }
-                        else {
+                        } else {
                             startTracker();
                         }
                     }
@@ -208,8 +239,49 @@ public class MainActivity extends AppCompatActivity {
         public View onCreateView(LayoutInflater inflater, ViewGroup container,
                                  Bundle savedInstanceState) {
             View rootView = inflater.inflate(R.layout.home_main, null);
+            Button button = (Button) rootView.findViewById(R.id.tracker_button);
 
             return rootView;
+        }
+
+        @Override
+        public void onStart() {
+            super.onStart();
+            updateButton();
+        }
+
+        private void toggleTracker() {
+            if (!isServiceRunning(getActivity(), GPSTracker.class)) {
+                Intent intent = new Intent(getActivity(), GPSTracker.class);
+                getActivity().startService(intent);
+                Toast.makeText(getActivity(),
+                        "Location tracker started", Toast.LENGTH_SHORT).show();
+                updateButton();
+            }
+            else {
+                Intent intent = new Intent(getActivity(), GPSTracker.class);
+                getActivity().stopService(intent);
+                Toast.makeText(getActivity(),
+                        "Location tracker stopped", Toast.LENGTH_SHORT).show();
+                updateButton();
+            }
+
+        }
+
+        private void updateButton() {
+            Button button = (Button) getView().findViewById(R.id.tracker_button);
+            if (!isServiceRunning(getActivity(), GPSTracker.class)) {
+                button.setText(R.string.start_tracker);
+            }
+            else {
+                button.setText(R.string.stop_tracker);
+            }
+            button.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    toggleTracker();
+                }
+            });
         }
 
     }
@@ -236,5 +308,17 @@ public class MainActivity extends AppCompatActivity {
             return rootView;
         }
 
+    }
+
+    private static boolean isServiceRunning(Activity activity, Class<?> serviceClass) {
+        ActivityManager manager =
+                (ActivityManager) activity.getSystemService(Context.ACTIVITY_SERVICE);
+        for (ActivityManager.RunningServiceInfo service :
+                manager.getRunningServices(Integer.MAX_VALUE)) {
+            if (serviceClass.getName().equals(service.service.getClassName())) {
+                return true;
+            }
+        }
+        return false;
     }
 }

@@ -2,7 +2,7 @@ package com.ericwadkins.locationtracker;
 
 import android.Manifest;
 import android.app.Activity;
-import android.app.IntentService;
+import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -19,43 +19,41 @@ import android.widget.Toast;
 
 import com.afollestad.materialdialogs.DialogAction;
 import com.afollestad.materialdialogs.MaterialDialog;
+import com.ericwadkins.request.Request;
+import com.ericwadkins.request.Response;
+
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.io.IOException;
 
 /**
  * Created by ericwadkins on 5/18/16.
  */
-public class GPSTracker extends IntentService implements LocationListener {
+public class GPSTracker extends Service implements LocationListener {
 
-    private Context context = null;
-
-    private Location location;
+    private static Location location;
 
     // The minimum distance to change updates in meters
-    private static final long MIN_DISTANCE_CHANGE_FOR_UPDATES = 10;
+    private static final long MIN_DISTANCE_CHANGE_FOR_UPDATES = 1;
 
     // The minimum time between updates in milliseconds
-    private static final long MIN_TIME_BW_UPDATES = 1000 * 1;
+    private static final long MIN_TIME_BW_UPDATES = 1000 * 5;
 
     private LocationManager locationManager;
 
     public GPSTracker() {
-        super("GPSTracker");
-    }
-
-    public GPSTracker(Activity activity) {
-        super("GPSTracker");
-        this.context = activity;
-        initialize();
     }
 
     private void initialize() {
         try {
-            locationManager = (LocationManager) context.getSystemService(LOCATION_SERVICE);
+            locationManager = (LocationManager) this.getSystemService(LOCATION_SERVICE);
 
             // getting GPS and network status
             boolean gpsEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER);
             boolean networkEnabled =
                     locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
-            boolean hasPermission = ContextCompat.checkSelfPermission(context,
+            boolean hasPermission = ContextCompat.checkSelfPermission(this,
                     Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
 
             Log.e("debug", "GPS: " + (gpsEnabled ? "enabled" : "disabled"));
@@ -67,20 +65,12 @@ public class GPSTracker extends IntentService implements LocationListener {
                 if (networkEnabled) {
                     locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER,
                             MIN_TIME_BW_UPDATES, MIN_DISTANCE_CHANGE_FOR_UPDATES, this);
-                    if (locationManager != null) {
-                        location = locationManager
-                                .getLastKnownLocation(LocationManager.NETWORK_PROVIDER);
-                    }
                 }
                 // if GPS Enabled get lat/long using GPS Services
                 if (gpsEnabled) {
                     if (location == null) {
                         locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER,
                                 MIN_TIME_BW_UPDATES, MIN_DISTANCE_CHANGE_FOR_UPDATES, this);
-                        if (locationManager != null) {
-                            location = locationManager
-                                    .getLastKnownLocation(LocationManager.GPS_PROVIDER);
-                        }
                     }
                 }
             }
@@ -89,12 +79,52 @@ public class GPSTracker extends IntentService implements LocationListener {
         }
     }
 
+    @Nullable
+    @Override
+    public IBinder onBind(Intent intent) {
+        return null;
+    }
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        initialize();
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        this.stopSelf();
+    }
+
     @Override
     public void onLocationChanged(Location location) {
         this.location = location;
         Log.e("Location changed", location.getLatitude() + ", " + location.getLongitude());
-        Toast.makeText(context, location.getLatitude() + ", " + location.getLongitude(),
+        Toast.makeText(this, location.getLatitude() + ", " + location.getLongitude(),
                 Toast.LENGTH_SHORT).show();
+
+        final Location loc = location;
+        Thread networkThread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                String urlString = "http://18.111.88.64:5200";
+                Request request = new Request(urlString);
+                JSONObject obj = new JSONObject();
+                try {
+                    obj.put("latitude", loc.getLatitude());
+                    obj.put("longitude", loc.getLongitude());
+                } catch (JSONException e) {}
+                request.addJsonData(obj);
+                try {
+                    Response response = request.POST();
+                    Log.e("response", response.toString());
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        });
+        //networkThread.start();
     }
 
     @Override
@@ -112,25 +142,7 @@ public class GPSTracker extends IntentService implements LocationListener {
 
     }
 
-    @Nullable
-    @Override
-    public IBinder onBind(Intent intent) {
-        return null;
-    }
-
-    @Override
-    public void onCreate() {
-        super.onCreate();
-    }
-
-    @Override
-    protected void onHandleIntent(Intent intent) {
-        Log.e("intent", "onHandleIntent");
-        Toast.makeText(context, location.getLatitude() + ", " + location.getLongitude(),
-                Toast.LENGTH_SHORT).show();
-    }
-
-    public Location getLocation() {
+    public static Location getLastLocation() {
         return location;
     }
 
