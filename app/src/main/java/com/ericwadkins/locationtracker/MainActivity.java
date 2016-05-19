@@ -1,6 +1,10 @@
 package com.ericwadkins.locationtracker;
 
 import android.Manifest;
+import android.app.AlarmManager;
+import android.app.PendingIntent;
+import android.content.Context;
+import android.content.Intent;
 import android.location.Location;
 import android.os.Bundle;
 import android.support.design.widget.TabLayout;
@@ -19,6 +23,8 @@ import android.view.ViewGroup;
 
 import com.afollestad.materialdialogs.MaterialDialog;
 import com.ericwadkins.tabbedlayout.R;
+
+import java.util.Calendar;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -67,8 +73,13 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        startTracker();
+    }
 
+    @Override
+    protected void onStart() {
+        super.onStart();
+
+        startTracker();
     }
 
     public void startTracker() {
@@ -76,14 +87,29 @@ public class MainActivity extends AppCompatActivity {
             getTrackerPermissions();
         }
         else {
-
-            GPSTracker tracker = new GPSTracker(this);
-            Location loc = tracker.getLocation();
-            if (loc != null) {
-                Log.e("debug", loc.toString());
+            if (!GPSTracker.isGPSEnabled(this)) {
+                GPSTracker.requestEnableGPS(this);
             }
             else {
-                Log.e("debug", "Location is null");
+                GPSTracker tracker = new GPSTracker(this);
+                Location location = tracker.getLocation();
+                if (location != null) {
+                    Log.e("debug", location.getLatitude() + ", " + location.getLongitude());
+                }
+                else {
+                    Log.e("debug", "null");
+                }
+
+                Intent intent = new Intent(this, GPSTracker.class);
+                PendingIntent pendingIntent = PendingIntent.getBroadcast(this,  0, intent, 0);
+
+                AlarmManager alarmManager = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
+                Calendar calendar = Calendar.getInstance();
+                calendar.setTimeInMillis(System.currentTimeMillis());
+                calendar.add(Calendar.SECOND, 1); // first time
+                long frequency = 5 * 1000; // Frequency in milliseconds
+                alarmManager.setRepeating(AlarmManager.RTC_WAKEUP,
+                        calendar.getTimeInMillis(), frequency, pendingIntent);
             }
 
         }
@@ -109,10 +135,13 @@ public class MainActivity extends AppCompatActivity {
                         if (!successful) {
                             new MaterialDialog.Builder(MainActivity.this)
                                     .title("Permissions required")
-                                    .content("The app will not be able to function properly until it" +
+                                    .content("This app will not be able to work properly until it" +
                                             " has the required permissions.")
                                     .positiveText("OK")
                                     .show();
+                        }
+                        else {
+                            startTracker();
                         }
                     }
                 });
