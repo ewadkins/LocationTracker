@@ -1,18 +1,15 @@
 package com.ericwadkins.locationtracker;
 
 import android.Manifest;
-import android.app.Activity;
-import android.content.pm.PackageManager;
 import android.location.Location;
+import android.os.Bundle;
 import android.support.design.widget.TabLayout;
-import android.support.v4.app.ActivityCompat;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.app.FragmentPagerAdapter;
 import android.support.v4.content.ContextCompat;
 import android.support.v4.view.ViewPager;
 import android.support.v7.app.AppCompatActivity;
-import android.os.Bundle;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.Menu;
@@ -20,14 +17,10 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 
-import com.afollestad.materialdialogs.DialogAction;
 import com.afollestad.materialdialogs.MaterialDialog;
 import com.ericwadkins.tabbedlayout.R;
 
 public class MainActivity extends AppCompatActivity {
-
-    private static final int TRACKER_REQUEST_CODE = 1;
-    private static PermissionHelper permissionHelper;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -74,27 +67,6 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        permissionHelper = new PermissionHelper(this, true)
-                .setPermissionGrantedCallback(new PermissionHelper.PermissionCallback() {
-                    @Override
-                    public void run(int requestCode, String[] granted, String[] denied) {
-                        switch (requestCode) {
-                            case TRACKER_REQUEST_CODE: startTracker(); break;
-                        }
-                    }
-                })
-                .setPermissionDeniedCallback(new PermissionHelper.PermissionCallback() {
-                    @Override
-                    public void run(int requestCode, String[] granted, String[] denied) {
-                        new MaterialDialog.Builder(MainActivity.this)
-                                .title("Permissions required")
-                                .content("The app will not be able to function properly until it" +
-                                        " has the required permissions.")
-                                .positiveText("OK")
-                                .show();
-                    }
-                });
-
         startTracker();
 
     }
@@ -118,26 +90,39 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private boolean hasTrackerPermissions() {
-        return permissionHelper.hasPermissions(
-                new String[]{
+        return PermissionHelper.hasPermissions(this,
+                new String[] {
                         Manifest.permission.ACCESS_FINE_LOCATION,
                         Manifest.permission.INTERNET
                 });
     }
 
     private void getTrackerPermissions() {
-        permissionHelper.requestPermissions(
-                new String[]{
+        PermissionHelper.requestPermissions(this,
+                new String[] {
                         Manifest.permission.ACCESS_FINE_LOCATION,
                         Manifest.permission.INTERNET},
-                TRACKER_REQUEST_CODE,
-                "This app needs to access the internet and your location! Just allow it...");
+                "This app needs access to the Internet and GPS to work properly!",
+                new PermissionHelper.PermissionCallback() {
+                    @Override
+                    public void run(boolean successful, String[] granted, String[] denied) {
+                        if (!successful) {
+                            new MaterialDialog.Builder(MainActivity.this)
+                                    .title("Permissions required")
+                                    .content("The app will not be able to function properly until it" +
+                                            " has the required permissions.")
+                                    .positiveText("OK")
+                                    .show();
+                        }
+                    }
+                });
     }
 
+    // This is required if you want to use PermissionHelper
     @Override
     public void onRequestPermissionsResult(int requestCode,
                                            String permissions[], int[] grantResults) {
-        permissionHelper.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        PermissionHelper.onRequestPermissionsResult(requestCode, permissions, grantResults);
     }
 
     @Override

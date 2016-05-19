@@ -10,55 +10,39 @@ import com.afollestad.materialdialogs.DialogAction;
 import com.afollestad.materialdialogs.MaterialDialog;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Created by ericwadkins on 5/18/16.
  */
 public class PermissionHelper {
 
-    Activity activity;
-    PermissionCallback granted = null;
-    PermissionCallback denied = null;
-    boolean debug = false;
+    public static boolean debug = false;
 
-    public PermissionHelper(final Activity activity, boolean debug) {
-        this.activity = activity;
-        this.debug = debug;
-    }
+    private static final Map<Integer, PermissionCallback> callbackMap = new HashMap<>();
 
-    public PermissionHelper(final Activity activity) {
-        this.activity = activity;
-    }
-
-    public boolean hasPermissions(String[] permissions) {
+    public static boolean hasPermissions(Activity activity, String[] permissions) {
         boolean hasPermissions = true;
         for (int i = 0; i < permissions.length; i++) {
             if (ContextCompat.checkSelfPermission(activity, permissions[i])
                     != PackageManager.PERMISSION_GRANTED) {
-                Log.e("debug", permissions[i] + " permission denied!");
                 hasPermissions = false;
             }
         }
         return hasPermissions;
     }
 
-    public void requestPermissions(final String[] permissions,
-                                  final int requestCode, String explanation) {
-        if (granted == null || denied == null) {
-            throw new RuntimeException("Must set permission callbacks before any requests!" +
-                    " Use setPermissionGrantedCallback() and setPermissionDeniedCallback()");
-        }
+    public static void requestPermissions(final Activity activity, final String[] permissions,
+                                          String explanation, final PermissionCallback callback) {
         final List<String> requiredPermissions = new ArrayList<>();
         final List<String> notRequiredPermissions = new ArrayList<>();
-        boolean requestRequired = false;
         boolean explanationRequired = false;
         for (int i = 0; i < permissions.length; i++) {
             if (ContextCompat.checkSelfPermission(activity, permissions[i])
                     != PackageManager.PERMISSION_GRANTED) {
-                Log.e("debug", permissions[i] + " permission denied!");
                 requiredPermissions.add(permissions[i]);
-                requestRequired = true;
                 if (ActivityCompat.shouldShowRequestPermissionRationale(activity, permissions[i])) {
                     explanationRequired = true;
                 }
@@ -67,7 +51,8 @@ public class PermissionHelper {
                 notRequiredPermissions.add(permissions[i]);
             }
         }
-        if (requestRequired) {
+        if (requiredPermissions.size() > 0) {
+            final int requestCode = saveCallback(callback);
             if (explanationRequired) {
                 new MaterialDialog.Builder(activity)
                         .title("Permissions required")
@@ -84,9 +69,8 @@ public class PermissionHelper {
                         .onNegative(new MaterialDialog.SingleButtonCallback() {
                             @Override
                             public void onClick(MaterialDialog dialog, DialogAction which) {
-                                callback(requestCode,
-                                        notRequiredPermissions.toArray(new String[0]),
-                                        requiredPermissions.toArray(new String[0]));
+                                callback(notRequiredPermissions.toArray(new String[0]),
+                                        requiredPermissions.toArray(new String[0]), callback);
                             }
                         })
                         .show();
@@ -97,14 +81,25 @@ public class PermissionHelper {
             }
         }
         else {
-            callback(requestCode, permissions, new String[0]);
+            callback(permissions, new String[0], callback);
         }
     }
 
-    public void onRequestPermissionsResult(int requestCode,
+    private static int saveCallback(PermissionCallback callback) {
+        int requestCode;
+        do {
+            requestCode = (int) (Math.random() * 65535);
+        }
+        while (callbackMap.containsKey(requestCode));
+        callbackMap.put(requestCode, callback);
+        return requestCode;
+    }
+
+    public static void onRequestPermissionsResult(int requestCode,
                                            String permissions[], int[] grantResults) {
+        PermissionCallback callback = callbackMap.get(requestCode);
         if (grantResults.length == 0) {
-            callback(requestCode, new String[0], permissions);
+            callback(new String[0], permissions, callback);
         }
         else {
             boolean allGranted = true;
@@ -120,39 +115,29 @@ public class PermissionHelper {
                 }
             }
             if (allGranted) {
-                callback(requestCode, permissions, new String[0]);
+                callback(permissions, new String[0], callback);
             }
             else {
-                callback(requestCode, grantedPermissions.toArray(new String[0]),
-                        deniedPermissions.toArray(new String[0]));
+                callback(grantedPermissions.toArray(new String[0]),
+                        deniedPermissions.toArray(new String[0]), callback);
             }
         }
     }
 
-    public PermissionHelper setPermissionGrantedCallback(PermissionCallback granted) {
-        this.granted = granted;
-        return this;
-    }
-
-    public PermissionHelper setPermissionDeniedCallback(PermissionCallback denied) {
-        this.denied = denied;
-        return this;
-    }
-
-    public void callback(int requestCode, String[] granted, String[] denied) {
+    public static void callback(String[] granted, String[] denied,
+                                PermissionCallback callback) {
         if (debug) {
-            printPermissionResults(requestCode, granted, denied);
+            printPermissionResults(granted, denied);
         }
         if (denied.length == 0) {
-            this.granted.run(requestCode, granted, denied);
+            callback.run(true, granted, denied);
         }
         else {
-            this.denied.run(requestCode, granted, denied);
+            callback.run(false, granted, denied);
         }
     }
 
-    private static void printPermissionResults(int requestCode, String[] granted, String[] denied) {
-        //Log.e("PermissionHelper", "Got result of permissions, requestCode = " + requestCode);
+    private static void printPermissionResults(String[] granted, String[] denied) {
         if (granted.length > 0) {
             Log.e("PermissionHelper", granted.length + "/" + (granted.length + denied.length)
                     + " permissions granted:");
@@ -170,7 +155,7 @@ public class PermissionHelper {
     }
 
     public interface PermissionCallback {
-        void run(int requestCode, String[] granted, String[] denied);
+        void run(boolean successful, String[] granted, String[] denied);
     }
 
     /*
