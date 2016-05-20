@@ -84,79 +84,19 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onStart() {
         super.onStart();
-
-        startTracker();
     }
 
-    public void startTracker() {
-        if (!hasTrackerPermissions()) {
-            getTrackerPermissions();
-        }
-        else {
-            if (!GPSTracker.isGPSEnabled(this)) {
-                GPSTracker.requestEnableGPS(this);
-            }
-            else {
-                /*GPSTracker tracker = new GPSTracker(this);
-                Location location = tracker.getLocation();
-                if (location != null) {
-                    Log.e("debug", location.getLatitude() + ", " + location.getLongitude());
-                }
-                else {
-                    Log.e("debug", "null");
-                }
-
-                Intent intent = new Intent(this, GPSService.class);
-                PendingIntent pendingIntent = PendingIntent.getBroadcast(this,  0, intent, 0);
-
-                AlarmManager alarmManager = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
-                Calendar calendar = Calendar.getInstance();
-                calendar.setTimeInMillis(System.currentTimeMillis());
-                calendar.add(Calendar.SECOND, 1); // first time
-                long frequency = 5 * 1000; // Frequency in milliseconds
-                alarmManager.setRepeating(AlarmManager.RTC_WAKEUP,
-                        calendar.getTimeInMillis(), frequency, pendingIntent);*/
-
-                // Starting GPS Service
-                /*GPSResultReceiver receiver = new GPSResultReceiver(new Handler());
-                receiver.setReceiver(new GPSResultReceiver.Receiver() {
-                    @Override
-                    public void onReceiveResult(int resultCode, Bundle resultData) {
-                        switch (resultCode) {
-                            case GPSService.STATUS_RUNNING: Log.e("DEBUG", "Running"); break;
-                            case GPSService.STATUS_FINISHED: Log.e("DEBUG", "Finished"); break;
-                        }
-                    }
-                });
-                Intent intent = new Intent(Intent.ACTION_SYNC, null, this, GPSService.class);
-
-                // Send optional extras to the IntentService
-                intent.putExtra("receiver", receiver);
-
-                startService(intent);*/
-
-                /*if (!isServiceRunning(this, GPSTracker.class)) {
-                    Intent intent = new Intent(this, GPSTracker.class);
-                    startService(intent);
-                }
-                else {
-                    Log.e("debug", "GPSTracker service already running");
-                }*/
-            }
-
-        }
-    }
-
-    private boolean hasTrackerPermissions() {
-        return PermissionHelper.hasPermissions(this,
+    private static boolean hasTrackerPermissions(final Activity activity) {
+        return PermissionHelper.hasPermissions(activity,
                 new String[] {
                         Manifest.permission.ACCESS_FINE_LOCATION,
                         Manifest.permission.INTERNET
                 });
     }
 
-    private void getTrackerPermissions() {
-        PermissionHelper.requestPermissions(this,
+    private static void getTrackerPermissions(final Activity activity,
+                                              final Runnable onGranted, final Runnable onDenied) {
+        PermissionHelper.requestPermissions(activity,
                 new String[]{
                         Manifest.permission.ACCESS_FINE_LOCATION,
                         Manifest.permission.INTERNET},
@@ -165,14 +105,14 @@ public class MainActivity extends AppCompatActivity {
                     @Override
                     public void run(boolean successful, String[] granted, String[] denied) {
                         if (!successful) {
-                            new MaterialDialog.Builder(MainActivity.this)
-                                    .title("Permissions required")
-                                    .content("This app will not be able to work properly until it" +
-                                            " has the required permissions.")
-                                    .positiveText("OK")
-                                    .show();
-                        } else {
-                            startTracker();
+                            if (onDenied != null) {
+                                onDenied.run();
+                            }
+                        }
+                        else {
+                            if (onGranted != null) {
+                                onGranted.run();
+                            }
                         }
                     }
                 });
@@ -251,21 +191,36 @@ public class MainActivity extends AppCompatActivity {
         }
 
         private void toggleTracker() {
-            if (!isServiceRunning(getActivity(), GPSTracker.class)) {
-                Intent intent = new Intent(getActivity(), GPSTracker.class);
-                getActivity().startService(intent);
-                Toast.makeText(getActivity(),
-                        "Location tracker started", Toast.LENGTH_SHORT).show();
-                updateButton();
-            }
-            else {
-                Intent intent = new Intent(getActivity(), GPSTracker.class);
-                getActivity().stopService(intent);
-                Toast.makeText(getActivity(),
-                        "Location tracker stopped", Toast.LENGTH_SHORT).show();
-                updateButton();
-            }
-
+            getTrackerPermissions(getActivity(),
+                    new Runnable() {
+                        @Override
+                        public void run() {
+                            if (!isServiceRunning(getActivity(), GPSTracker.class)) {
+                                Intent intent = new Intent(getActivity(), GPSTracker.class);
+                                getActivity().startService(intent);
+                                Toast.makeText(getActivity(),
+                                        "Location tracker started", Toast.LENGTH_SHORT).show();
+                                updateButton();
+                            } else {
+                                Intent intent = new Intent(getActivity(), GPSTracker.class);
+                                getActivity().stopService(intent);
+                                Toast.makeText(getActivity(),
+                                        "Location tracker stopped", Toast.LENGTH_SHORT).show();
+                                updateButton();
+                            }
+                        }
+                    },
+                    new Runnable() {
+                        @Override
+                        public void run() {
+                            new MaterialDialog.Builder(getActivity())
+                                    .title("Permissions required")
+                                    .content("This app will not be able to work properly until it" +
+                                            " has the required permissions.")
+                                    .positiveText("OK")
+                                    .show();
+                        }
+                    });
         }
 
         private void updateButton() {

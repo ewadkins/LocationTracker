@@ -74,7 +74,11 @@ public class GPSTracker extends Service implements LocationListener {
                     }
                 }
             }
+            else {
+                onDestroy();
+            }
         } catch (Exception e) {
+            onDestroy();
             e.printStackTrace();
         }
     }
@@ -94,6 +98,9 @@ public class GPSTracker extends Service implements LocationListener {
     @Override
     public void onDestroy() {
         super.onDestroy();
+        try {
+            locationManager.removeUpdates(this);
+        } catch (SecurityException e) {}
         this.stopSelf();
     }
 
